@@ -43,6 +43,24 @@ class HyperplaneDecisionRealTime:
             json.dump(d, f, indent=4, ensure_ascii=False)
 
 
+class PathConfig:
+    def __init__(self, path_type: str, activation = None):
+        self.path_type = path_type
+        self.activation = activation
+
+    def forward(self, x: np.ndarray):
+        if self.path_type == "class":
+            return self.activation
+        elif self.path_type == "default":
+            return self.activation(x)
+        else:
+            raise ValueError(f"Unknown path type: {self.path_type}")
+
+class RouterConfig:
+    def __init__(self, positive_path, negative_path):
+        self.positive_path = positive_path
+        self.negative_path = negative_path
+
 class Router:
     def __init__(self, decision: HyperplaneDecisionRealTime, positive_callable: PathConfig, negative_callable: PathConfig):
         self.positive_callable = positive_callable
@@ -60,23 +78,7 @@ class Router:
             self.n_mlp += 1
             return self.negative_callable.forward(x)
 
-class PathConfig:
-    def __init__(self, path_type: str, activation = None):
-        self.path_type = path_type
-        self.activation = activation
 
-    def forward(self, x: np.ndarray):
-        if self.path_type == "class":
-            return self.activation
-        elif self.path_type == "default":
-            return self.activation(x)
-        else:
-            raise ValueError(f"Unknown path type: {self.path_type}")
-
-class RouterConfig:
-    def __init__(self, positive_class, negative_path):
-        self.positive_path = positive_class
-        self.negative_path = negative_path
 
 def analyze(model, dataset):
     np.save("dataset.npy", dataset)
