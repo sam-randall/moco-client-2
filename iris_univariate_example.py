@@ -33,30 +33,31 @@ OP_SYMBOLS = {
     operator.ne: "!=",
 }
 
-def scan_thresholds(X, y, feature_index):
-    feature = X[:, feature_index]
-    c = 0  # Class to check against (Setosa)
-    op = operator.le  # Operator for comparison
-
+def scan_thresholds_for_feature(feature, y, y_class, op):
     vals = np.unique(feature)
     percentages_true = {}
     percentages_false = {}
+    group_sizes = {}
 
     for val in vals:
         pred = op(feature, val).astype(int)
-        d = pd.Series((y == c)[pred == 1]).value_counts().to_dict()
+        d = pd.Series((y == y_class)[pred == 1]).value_counts().to_dict()
         percentage_true = d.get(True, 0) / (d.get(True, 0) + d.get(False, 0)) * 100 if (True in d or False in d) else 0
         percentage_false = 100 - percentage_true if (True in d or False in d) else 0
         
         percentages_true[val] = percentage_true
         percentages_false[val] = percentage_false
 
-        if percentage_true > 90:
-            print(f"{OP_SYMBOLS[op]} {val}, Percentage of True (Setosa): {percentage_true:.2f}%")
-        elif percentage_false > 90:
-            print(f"{OP_SYMBOLS[op]} {val}, Percentage of False (Not Setosa): {percentage_false:.2f}%")
+        group_sizes[val] = d.get(True, 0) + d.get(False, 0)
 
-    return percentages_true, percentages_false
+    return percentages_true, percentages_false, group_sizes
+
+def scan_thresholds(X, y, feature_index):
+    feature = X[:, feature_index]
+    c = 0  # Class to check against (Setosa)
+    op = operator.le  # Operator for comparison
+
+    return scan_thresholds_for_feature(feature, y, c, op)
 
 def main():
     X, y = load_iris(return_X_y=True)
@@ -66,7 +67,18 @@ def main():
     # print("Best threshold for feature 0 (Sepal Length):", t)
     # print("Best accuracy for feature 0 (Sepal Length):", a)
 
-    percentages_true, percentages_false = scan_thresholds(X, y, feature_index=0)  # Scan thresholds for Sepal Length (feature index 0)
+    for i in range(X.shape[1]):
+        percentage_true_le, percentage_false_le, group_sizes_le = scan_thresholds_for_feature(X[:, i], y, y_class=0, op=operator.le) 
+        percentage_true_ge, percentage_false_ge, group_sizes_ge = scan_thresholds_for_feature(X[:, i], y, y_class=0, op=operator.ge) # Scan thresholds for each feature
+
+        print(f"Feature {i}:")
+        print("  Operator <= :")
+        for val, pct in percentage_true_le.items():
+            print(f"    Threshold {val}: {pct:.2f}% true, {percentage_false_le[val]:.2f}% false, Group size: {group_sizes_le[val]}")
+        print("  Operator >= :")
+        for val, pct in percentage_true_ge.items():
+            print(f"    Threshold {val}: {pct:.2f}% true, {percentage_false_ge[val]:.2f}% false, Group size: {group_sizes_ge[val]}")
+    percentages_true, percentages_false, _ = scan_thresholds(X, y, feature_index=0)  # Scan thresholds for Sepal Length (feature index 0)
 
     # Inputs for the function.
     feature = X[:, 0]  # Sepal Length
