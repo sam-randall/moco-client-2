@@ -35,22 +35,29 @@ OP_SYMBOLS = {
 
 def scan_thresholds_for_feature(feature, y, y_class, op):
     vals = np.unique(feature)
-    percentages_true = {}
-    percentages_false = {}
-    group_sizes = {}
+    rows = []
 
     for val in vals:
         pred = op(feature, val).astype(int)
         d = pd.Series((y == y_class)[pred == 1]).value_counts().to_dict()
         percentage_true = d.get(True, 0) / (d.get(True, 0) + d.get(False, 0)) * 100 if (True in d or False in d) else 0
         percentage_false = 100 - percentage_true if (True in d or False in d) else 0
-        
-        percentages_true[val] = percentage_true
-        percentages_false[val] = percentage_false
 
-        group_sizes[val] = d.get(True, 0) + d.get(False, 0)
+        rows.append({
+            "Threshold": val,
+            "Percentage True": percentage_true,
+            "Percentage False": percentage_false,
+            "Group Size": d.get(True, 0) + d.get(False, 0),
+            "Operator": OP_SYMBOLS[op]
+        })
+    return pd.DataFrame(rows)
 
-    return percentages_true, percentages_false, group_sizes
+def filter_rules(df, threshold_percentage=90, min_group_size=5):
+    filtered_df = df[
+        ((df["Percentage True"] >= threshold_percentage) | (df["Percentage False"] >= threshold_percentage)) &
+        (df["Group Size"] >= min_group_size)
+    ]
+    return filtered_df
 
 def scan_thresholds(X, y, feature_index):
     feature = X[:, feature_index]
@@ -68,16 +75,17 @@ def main():
     # print("Best accuracy for feature 0 (Sepal Length):", a)
 
     for i in range(X.shape[1]):
-        percentage_true_le, percentage_false_le, group_sizes_le = scan_thresholds_for_feature(X[:, i], y, y_class=0, op=operator.le) 
-        percentage_true_ge, percentage_false_ge, group_sizes_ge = scan_thresholds_for_feature(X[:, i], y, y_class=0, op=operator.ge) # Scan thresholds for each feature
+        df_le = scan_thresholds_for_feature(X[:, i], y, y_class=0, op=operator.le) 
+        df_ge = scan_thresholds_for_feature(X[:, i], y, y_class=0, op=operator.ge) # Scan thresholds for each feature
+
+        rules_le = filter_rules(df_le)
+        rules_ge = filter_rules(df_ge)
 
         print(f"Feature {i}:")
         print("  Operator <= :")
-        for val, pct in percentage_true_le.items():
-            print(f"    Threshold {val}: {pct:.2f}% true, {percentage_false_le[val]:.2f}% false, Group size: {group_sizes_le[val]}")
+        print(rules_le)
         print("  Operator >= :")
-        for val, pct in percentage_true_ge.items():
-            print(f"    Threshold {val}: {pct:.2f}% true, {percentage_false_ge[val]:.2f}% false, Group size: {group_sizes_ge[val]}")
+        print(rules_ge)
     percentages_true, percentages_false, _ = scan_thresholds(X, y, feature_index=0)  # Scan thresholds for Sepal Length (feature index 0)
 
     # Inputs for the function.
