@@ -38,7 +38,8 @@ class Feature:
         self.feature = feature
         self.feature_name = feature_name
 
-def scan_thresholds_for_binary_feature(feature: Feature, mask, op, y_class):
+def scan_thresholds_for_binary_feature(feature: Feature, mask: np.ndarray, op: operator, y_class: int):
+    '''Scans thresholds for a binary feature and returns a DataFrame with the results.'''
     vals = np.unique(feature.feature)
     rows = []
 
