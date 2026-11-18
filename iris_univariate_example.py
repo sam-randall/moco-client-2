@@ -41,7 +41,7 @@ class Feature:
 def scan_thresholds_for_binary_feature(feature: Feature, mask: np.ndarray, op: operator, y_class: int):
     '''Scans thresholds for a binary feature and returns a DataFrame with the results.'''
     vals = np.unique(feature.feature)
-    
+
     if op in [operator.gt, operator.ge]:
         vals = np.sort(vals)[::-1]  # Sort descending for greater than operators
     else:
@@ -112,7 +112,7 @@ def main():
     
 
     print("All rules:")
-    print(rules_filtered[["Threshold", "Percentage True", "Percentage False", "Group Size", "Operator Symbol"]])
+    print(rules_filtered[["Feature ID", "Threshold", "Percentage True", "Percentage False", "Group Size"]])
 
 
 
