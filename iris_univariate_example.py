@@ -41,6 +41,11 @@ class Feature:
 def scan_thresholds_for_binary_feature(feature: Feature, mask: np.ndarray, op: operator, y_class: int):
     '''Scans thresholds for a binary feature and returns a DataFrame with the results.'''
     vals = np.unique(feature.feature)
+    
+    if op in [operator.gt, operator.ge]:
+        vals = np.sort(vals)[::-1]  # Sort descending for greater than operators
+    else:
+        vals = np.sort(vals)  # Sort ascending for less than operators
     rows = []
 
     for val in vals:
@@ -81,28 +86,34 @@ def scan_thresholds(X, y, feature_index):
 
     return scan_thresholds_for_feature(feature, feature_index, y, c, op)
 
+
+def scan_matrix_for_rules(X, y):
+    rules = []
+    y_unique = np.unique(y)
+    dfs = []
+    for y_class in y_unique:
+        for feature_index in range(X.shape[1]):
+            df_le = scan_thresholds_for_feature(X, feature_index, y, y_class=y_class, op=operator.le)
+            df_ge = scan_thresholds_for_feature(X, feature_index, y, y_class=y_class, op=operator.ge)
+
+            dfs.append(df_le)
+            dfs.append(df_ge)
+
+    combined_df = pd.concat(dfs, ignore_index=True)
+
+    return combined_df
+
 def main():
     X, y = load_iris(return_X_y=True)
     # t, a = find_threshold(X, y == 2, feature_index=0)
 
+    rules = scan_matrix_for_rules(X, y)
+    rules_filtered = filter_rules(rules, threshold_percentage=90, min_group_size=5)
+    
 
-    # print("Best threshold for feature 0 (Sepal Length):", t)
-    # print("Best accuracy for feature 0 (Sepal Length):", a)
+    print("All rules:")
+    print(rules_filtered[["Threshold", "Percentage True", "Percentage False", "Group Size", "Operator Symbol"]])
 
-    for i in range(X.shape[1]):
-        df_le = scan_thresholds_for_feature(X, i, y, y_class=0, op=operator.le) 
-        df_ge = scan_thresholds_for_feature(X, i, y, y_class=0, op=operator.ge) # Scan thresholds for each feature
-
-        rules_le = filter_rules(df_le)
-        rules_ge = filter_rules(df_ge)
-
-        print(f"Feature {i}:")
-        print("  Operator <= :")
-        print(rules_le)
-        print("  Operator >= :")
-        print(rules_ge)
-
-    plt.show()
 
 
 
