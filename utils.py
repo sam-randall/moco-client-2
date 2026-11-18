@@ -80,38 +80,25 @@ class Router:
 
 
 
-def analyze(model, dataset):
+def analyze(dataset, predictions):
     np.save("dataset.npy", dataset)
-    joblib.dump(model, "model.joblib")
+    np.save("predictions.npy", predictions)
 
     URL = 'moco-vywr.onrender.com'
     LOCAL_URL = 'localhost:8000'
 
     response = requests.post(
-        f"http://{URL}/analyze/",
+        f"http://{URL}/get-all-rules/",
         files={
-            "model_file": open("model.joblib", "rb"),
             "dataset": open("dataset.npy", "rb"),
+            "predictions": open("predictions.npy", "rb"),
         },
     )
 
     if response.status_code == 200:
 
         data = response.json()
-        W = data['rule']['W']
-        b = data['rule']['b']
-        t = data['rule']['t']
-
-        hd = HyperplaneDecisionRealTime(np.array(W), np.array(b), t)
-
-        router = Router(hd, lambda x: 0, lambda x: model.predict(x).item())
-
-        positive_path = PathConfig("class", activation=0)
-        negative_path = PathConfig("default", activation=lambda x: model.predict(x).item())
-        router_config = RouterConfig(positive_path, negative_path)
-
-        router = Router(hd, router_config.positive_path, router_config.negative_path)
-        return router
+        return data
     else:
         print("failed", response)
         return None
@@ -151,4 +138,17 @@ def optimize(model, dataset) -> Router:
         print("failed", response)
         return None
 
-    
+def main():
+    iris = load_iris()
+    X = iris.data
+    y = iris.target
+
+    model = MLPClassifier(hidden_layer_sizes=(10,), max_iter=1000)
+    model.fit(X, y)
+
+    data = analyze(X, model.predict(X))
+
+    print("analyze data", data)
+
+if __name__ == "__main__":
+    main()
