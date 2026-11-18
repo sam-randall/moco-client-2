@@ -3,6 +3,8 @@ from sklearn.datasets import load_iris
 import matplotlib.pyplot as plt
 import pandas as pd
 import operator
+from sklearn.model_selection import train_test_split
+from scipy.stats import beta
 
 def find_threshold(X, y, feature_index):
     # Get the unique values of the feature
@@ -38,7 +40,7 @@ class Feature:
         self.feature = feature
         self.feature_name = feature_name
 
-def scan_thresholds_for_binary_feature(feature: Feature, mask: np.ndarray, op: operator, y_class: int):
+def scan_thresholds_for_binary_feature(feature: Feature, mask: np.ndarray, op: operator, y_class: int) -> pd.DataFrame:
     '''Scans thresholds for a binary feature and returns a DataFrame with the results.'''
     vals = np.unique(feature.feature)
 
@@ -66,10 +68,59 @@ def scan_thresholds_for_binary_feature(feature: Feature, mask: np.ndarray, op: o
         })
     return pd.DataFrame(rows)
 
-def scan_thresholds_for_feature(X, feature_id, y, y_class, op):
-    feature = X[:, feature_id]
+from scipy.stats import beta
+
+def precision_lower_bound(n_true, n_total, confidence=0.95):
+    if n_total == 0:
+        return 0.0
+
+    if n_true == 0:
+        return 0.0
+
+    alpha = 1 - confidence
+
+    return beta.ppf(
+        alpha,
+        n_true,
+        n_total - n_true + 1
+    ) * 100
+
+def scan_thresholds_for_feature(X, feature_id, y, y_class, op, confidence = 0.95) -> pd.DataFrame:
+    X_train, X_test, y_train, y_test = train_test_split(X, y)
+    feature = X_train[:, feature_id]
     feature = Feature(feature, feature_id)
-    return scan_thresholds_for_binary_feature(feature, y == y_class, op, y_class)
+    thresholds = scan_thresholds_for_binary_feature(feature, y_train == y_class, op, y_class)
+    # Validate thresholds using unseen data
+    validation_feature = X_test[:, feature_id]
+    validation_mask = y_test == y_class
+
+    results = []
+
+    for _, row in thresholds.iterrows():
+        selected = op(validation_feature, row["Threshold"])
+
+        n_total = selected.sum()
+        n_true = validation_mask[selected].sum()
+
+        precision = (
+            n_true / n_total * 100
+            if n_total > 0 else 0
+        )
+
+        lower_bound = precision_lower_bound(
+            n_true, n_total, confidence
+        )
+
+        result = row.to_dict()
+
+        result["Validation Group Size"] = n_total
+        result["Validation Precision"] = precision
+        result["Precision Lower Bound"] = lower_bound
+
+        results.append(result)
+
+    return pd.DataFrame(results)
+
     
 
 def filter_rules(df, threshold_percentage=90, min_group_size=5):
@@ -112,7 +163,7 @@ def main():
     
 
     print("All rules:")
-    print(rules_filtered[["Feature ID", "Threshold", "Percentage True", "Percentage False", "Group Size"]])
+    print(rules_filtered)
 
 
 
