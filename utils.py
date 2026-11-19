@@ -254,7 +254,7 @@ def main():
     model.fit(X, y == 0)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y == 0)
-    high_precision_model = HighPrecisionBinaryClassifier(min_precision=0.9, model_architecture = LogisticRegression())
+    high_precision_model = HighPrecisionBinaryClassifier(min_precision=0.9, estimator= LogisticRegression())
     high_precision_model.fit(X_train, y_train)
     test_pred = high_precision_model.predict(X_test)
     print(pd.Series(y_test[test_pred]).value_counts().to_dict())
