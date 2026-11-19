@@ -6,6 +6,11 @@ import requests
 import numpy as np
 from typing import Callable
 import json
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+import pandas as pd
+from dataclasses import dataclass
 
 class HyperplaneDecisionRealTime:
     def __init__(self, W, b, t):
@@ -138,14 +143,122 @@ def optimize(model, dataset) -> Router:
         print("failed", response)
         return None
 
+@dataclass
+class Result:
+    threshold: float
+    group_size: float
+    ratio: float
+    true_count: int
+
+class HighPrecisionBinaryClassifier:
+    def __init__(self, min_precision: float, estimator):
+        self.min_precision = min_precision
+        self.estimator = estimator
+        self.predict_method = None
+
+    def fit(self, X: np.ndarray, y: np.ndarray):
+        model = self.estimator
+        model.fit(X, y)
+        probabilities = model.predict_proba(X)[:, 1]
+        ts = np.linspace(probabilities.min(), probabilities.max(), 100)
+        counts = []
+        rows = []
+        first_threshold = None
+        for t in ts:
+            mask = probabilities > t
+            if mask.sum() == 0:
+                continue
+            y_counts = pd.Series(y[mask]).value_counts().to_dict()
+            true_count = y_counts.get(1, 0)
+            
+            ratio = true_count / mask.sum()
+
+            rows.append({
+                "true_count": true_count,
+                "ratio": ratio,
+                "threshold": t
+            })
+
+            if first_threshold is None and ratio > self.min_precision:
+                first_threshold = Result(t, mask.sum(), ratio, true_count)
+                
+        self.predict_method = Workspace.build_model(model, first_threshold)
+
+    def predict(self, X: np.ndarray):
+        return self.predict_method(X)
+
+
+class Workspace:
+
+    def __init__(self):
+        self.dataset = None
+        self.predictions = None
+
+    def add_dataset(self, X: np.ndarray):
+        self.dataset = X
+
+    def add_predictions(self, predictions: np.ndarray):
+        self.predictions = predictions
+
+    def fit_logistic_regression_proxy(self):
+        
+
+        model = LogisticRegression()
+
+        X_train, X_test, y_train, y_test = train_test_split(self.dataset, self.predictions)
+        model.fit(X_train, y_train)
+        return model
+
+
+    def fit_high_precision_binary_classifier(self, min_precision: float, X_train: np.ndarray, y_train: np.ndarray):
+
+        model = LogisticRegression()
+        model.fit(X_train, y_train)
+        probabilities = model.predict_proba(X_train)[:, 1]
+        ts = np.linspace(probabilities.min(), probabilities.max(), 100)
+        counts = []
+        rows = []
+        first_threshold = None
+        for t in ts:
+            mask = probabilities > t
+            y_counts = pd.Series(y_train[mask]).value_counts().to_dict()
+            true_count = y_counts.get(1, 0)
+            ratio = true_count / mask.sum()
+
+            rows.append({
+                "true_count": true_count,
+                "ratio": ratio,
+                "threshold": t
+            })
+
+            if first_threshold is None and ratio > min_precision:
+                first_threshold = Result(t, mask.sum(), ratio, true_count)
+                
+        return Workspace.build_model(model, first_threshold)
+
+
+    @staticmethod
+    def build_model(model: LogisticRegression, result: Result):
+        def forward(x: np.ndarray):
+            out = model.predict_proba(x)[:, 1]
+            return out > result.threshold
+        return forward
+
+
 def main():
     iris = load_iris()
     X = iris.data
     y = iris.target
 
     model = MLPClassifier(hidden_layer_sizes=(10,), max_iter=1000)
-    model.fit(X, y)
+    model.fit(X, y == 0)
 
+    X_train, X_test, y_train, y_test = train_test_split(X, y == 0)
+    high_precision_model = HighPrecisionBinaryClassifier(min_precision=0.9, model_architecture = LogisticRegression())
+    high_precision_model.fit(X_train, y_train)
+    test_pred = high_precision_model.predict(X_test)
+    print(pd.Series(y_test[test_pred]).value_counts().to_dict())
+    
     data = analyze(X, model.predict(X))
 
     print("analyze data", data)
