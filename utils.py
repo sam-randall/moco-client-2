@@ -155,6 +155,34 @@ class HighPrecisionBinaryClassifier:
         self.min_precision = min_precision
         self.estimator = estimator
         self.predict_method = None
+        self.threshold = None
+
+    @staticmethod
+    def scan_for_first_threshold_achieving_min_precision(probabilities: np.ndarray, y: np.ndarray):
+        ts = np.linspace(probabilities.min(), probabilities.max(), 100)
+        counts = []
+        rows = []
+        first_threshold = None
+        for t in ts:
+            mask = probabilities > t
+            if mask.sum() == 0:
+                continue
+            y_counts = pd.Series(y[mask]).value_counts().to_dict()
+            true_count = y_counts.get(1, 0)
+            
+            ratio = true_count / mask.sum()
+
+            rows.append({
+                "true_count": true_count,
+                "ratio": ratio,
+                "threshold": t
+            })
+
+            if first_threshold is None and ratio > self.min_precision:
+                first_threshold = Result(t, mask.sum(), ratio, true_count)
+                
+
+        return first_threshold
 
     def fit(self, X: np.ndarray, y: np.ndarray):
         model = self.estimator
@@ -181,11 +209,11 @@ class HighPrecisionBinaryClassifier:
 
             if first_threshold is None and ratio > self.min_precision:
                 first_threshold = Result(t, mask.sum(), ratio, true_count)
+                self.threshold = first_threshold.threshold
                 
-        self.predict_method = Workspace.build_model(model, first_threshold)
-
     def predict(self, X: np.ndarray):
-        return self.predict_method(X)
+        out = self.estimator.predict_proba(X)[:, 1]
+        return out > self.threshold
 
 
 class Workspace:
@@ -243,6 +271,24 @@ class Workspace:
             out = model.predict_proba(x)[:, 1]
             return out > result.threshold
         return forward
+
+class CascadedBinaryClassifier:
+    def __init__(self, router_estimator, base_model):
+        self.router_estimator = router_estimator
+        self.base_model = base_model
+
+    def fit(self, x: np.ndarray, y: np.ndarray):
+        self.base_model.fit(x, y)
+        probs = self.base_model.predict_proba(x)[:, 1]
+        binary_classifier = HighPrecisionBinaryClassifier(0.95)
+        first_threshold_result = HighPrecisionBinaryClassifier.scan_for_first_threshold_achieving_min_precision(probs, y)
+        self.router_estimator = HighPrecisionBinaryClassifier
+
+    def predict(self, x: np.ndarray):
+        pass
+
+
+
 
 
 def main():
